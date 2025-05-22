@@ -8,10 +8,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Product } from '@/constants/data';
+import { db } from '@/lib/firebase';
+import { Product } from '@/types/acara';
 import { IconEdit, IconDotsVertical, IconTrash } from '@tabler/icons-react';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface CellActionProps {
   data: Product;
@@ -42,6 +45,23 @@ export const CellAction: React.FC<CellActionProps> = ({ data }) => {
         <DropdownMenuContent align='end'>
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
 
+          <DropdownMenuItem
+            onClick={async () => {
+              const docRef = doc(db, 'acara', data.id);
+              try {
+                await updateDoc(docRef, {
+                  is_public: true
+                });
+                toast('Berhasil mengaktifkan acara!');
+                router.refresh();
+              } catch (error) {
+                console.error('Gagal update dokumen:', error);
+                toast('Gagal mengaktifkan acara!');
+              }
+            }}
+          >
+            Public Acara
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => router.push(`/dashboard/product/${data.id}`)}
           >

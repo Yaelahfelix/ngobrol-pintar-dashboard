@@ -1,22 +1,22 @@
 'use client';
 import { Badge } from '@/components/ui/badge';
 import { DataTableColumnHeader } from '@/components/ui/table/data-table-column-header';
-import { Product } from '@/constants/data';
 import { Column, ColumnDef } from '@tanstack/react-table';
 import { CheckCircle2, Text, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import { CellAction } from './cell-action';
 import { CATEGORY_OPTIONS } from './options';
+import { Product } from '@/types/acara';
 
 export const columns: ColumnDef<Product>[] = [
   {
-    accessorKey: 'photo_url',
+    accessorKey: 'thumbnailUrl',
     header: 'IMAGE',
     cell: ({ row }) => {
       return (
         <div className='relative aspect-square'>
           <Image
-            src={row.getValue('photo_url')}
+            src={row.getValue('thumbnailUrl')}
             alt={row.getValue('name')}
             fill
             className='rounded-lg'
@@ -29,12 +29,12 @@ export const columns: ColumnDef<Product>[] = [
     id: 'name',
     accessorKey: 'name',
     header: ({ column }: { column: Column<Product, unknown> }) => (
-      <DataTableColumnHeader column={column} title='Name' />
+      <DataTableColumnHeader column={column} title='Name Acara' />
     ),
     cell: ({ cell }) => <div>{cell.getValue<Product['name']>()}</div>,
     meta: {
       label: 'Name',
-      placeholder: 'Search products...',
+      placeholder: 'Cari acara...',
       variant: 'text',
       icon: Text
     },
@@ -48,11 +48,9 @@ export const columns: ColumnDef<Product>[] = [
     ),
     cell: ({ cell }) => {
       const status = cell.getValue<Product['category']>();
-      const Icon = status === 'active' ? CheckCircle2 : XCircle;
 
       return (
         <Badge variant='outline' className='capitalize'>
-          <Icon />
           {status}
         </Badge>
       );
@@ -64,15 +62,63 @@ export const columns: ColumnDef<Product>[] = [
       options: CATEGORY_OPTIONS
     }
   },
+
   {
-    accessorKey: 'price',
-    header: 'PRICE'
+    accessorKey: 'harga',
+    header: 'PRICE',
+    cell: ({ cell }) => {
+      const isFree = cell.getValue<Product['is_free']>();
+      const price = cell.getValue<Product['harga']>();
+      return (
+        <div className=''>
+          {isFree ? (
+            <Badge variant='default' className='capitalize' color='#86fb7a'>
+              Gratis
+            </Badge>
+          ) : (
+            <Badge variant='outline' className='capitalize'>
+              {new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR'
+              }).format(parseInt(price))}
+            </Badge>
+          )}
+        </div>
+      );
+    }
   },
   {
     accessorKey: 'description',
-    header: 'DESCRIPTION'
+    header: 'DESCRIPTION',
+    cell: ({ cell }) => {
+      const description = cell.getValue<Product['description']>();
+      return (
+        <div className='text-muted-foreground max-w-[300px] truncate text-sm'>
+          {description}
+        </div>
+      );
+    }
   },
 
+  {
+    id: 'is_public',
+    accessorKey: 'is_public',
+    header: ({ column }: { column: Column<Product, unknown> }) => (
+      <DataTableColumnHeader column={column} title='Status' />
+    ),
+    cell: ({ cell }) => {
+      const status = cell.getValue<Product['is_public']>();
+
+      return (
+        <Badge
+          variant={status ? 'destructive' : 'default'}
+          className='capitalize'
+        >
+          {status ? 'Aktif' : 'Non-Aktif'}
+        </Badge>
+      );
+    }
+  },
   {
     id: 'actions',
     cell: ({ row }) => <CellAction data={row.original} />

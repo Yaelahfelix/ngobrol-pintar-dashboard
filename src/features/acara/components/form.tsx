@@ -1,5 +1,7 @@
 'use client';
 
+import { DatePicker } from '@/components/date-picker';
+import { DateTimePicker24hForm } from '@/components/datetime-picker-24h';
 import { FileUploader } from '@/components/file-uploader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,13 +23,14 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Product } from '@/constants/mock-api';
+import { Product } from '@/types/acara';
 import { db } from '@/lib/firebase';
 import { uploadImage } from '@/lib/uploadImage';
+import { useUser } from '@clerk/nextjs';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addDoc, collection } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import * as z from 'zod';
@@ -39,6 +42,16 @@ const ACCEPTED_IMAGE_TYPES = [
   'image/png',
   'image/webp'
 ];
+
+function formatRupiah(value: string | number): string {
+  if (!value) return '';
+  return 'Rp' + value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function parseRupiah(value: string): string {
+  const cleaned = value.replace(/[^\d]/g, '');
+  return cleaned;
+}
 
 const formSchema = z.object({
   image: z
@@ -53,12 +66,22 @@ const formSchema = z.object({
       '.jpg, .jpeg, .png and .webp files are accepted.'
     ),
   name: z.string().min(2, {
-    message: 'Product name must be at least 2 characters.'
+    message: 'Nama Acara must be at least 2 characters.'
+  }),
+  pembicara: z.string().min(2, {
+    message: 'Nama Pembicara must be at least 2 characters.'
+  }),
+  jabatan_pembicara: z.string().min(2, {
+    message: 'Jabatan Pembicara must be at least 2 characters.'
+  }),
+  slot: z.string(),
+  tempat: z.string().min(2, {
+    message: 'Tempat must be at least 2 characters.'
   }),
   tanggal: z.date({ message: 'Tanggal pelaksanaan wajib diisi' }),
   is_free: z.boolean(),
   category: z.string(),
-  harga: z.number(),
+  harga: z.string(),
   description: z.string().min(10, {
     message: 'Description must be at least 10 characters.'
   })
@@ -71,16 +94,26 @@ export default function ProductForm({
   initialData: Product | null;
   pageTitle: string;
 }) {
-  const defaultValues = {
-    name: initialData?.name || '',
-    category: initialData?.category || '',
-    harga: initialData?.harga || 0,
-    description: initialData?.description || '',
-    is_free: initialData?.is_free || true,
-    tanggal: initialData?.tanggal || new Date()
-  };
+  const defaultValues = useMemo(
+    () => ({
+      name: initialData?.name || '',
+      category: initialData?.category || '',
+      harga: initialData?.harga || '',
+      description: initialData?.description || '',
+      is_free: initialData?.is_free ?? true,
+      tanggal: initialData?.tanggal
+        ? new Date(initialData.tanggal)
+        : new Date(),
+      pembicara: initialData?.pembicara || '',
+      jabatan_pembicara: initialData?.jabatan_pembicara || '',
+      tempat: initialData?.tempat || '',
+      slot: initialData?.slot || ''
+    }),
+    [initialData]
+  );
   const [isLoading, setIsLoading] = useState(false);
   const Router = useRouter();
+  const { user } = useUser();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -90,17 +123,25 @@ export default function ProductForm({
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const thumbnailUrl = await uploadImage(values.image, 'thumbnail_acara');
+      const thumbnailUrl = await uploadImage(
+        values.image[0],
+        'thumbnail_acara'
+      );
+      const { image, ...rest } = values;
       await addDoc(collection(db, 'acara'), {
-        ...values,
+        ...rest,
         is_public: false,
         is_complete: false,
-        thumbnailUrl
+        thumbnailUrl,
+        userId: user?.id
       });
       toast('Berhasil membuat acara!');
       Router.push('/dashboard/acara');
-    } catch {
+    } catch (err) {
+      console.log(err);
       toast('Terjadi kesalahan di server!');
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -120,13 +161,13 @@ export default function ProductForm({
               render={({ field }) => (
                 <div className='space-y-6'>
                   <FormItem className='w-full'>
-                    <FormLabel>Thumbhnail</FormLabel>
+                    <FormLabel>Poster Seminar</FormLabel>
                     <FormControl>
                       <FileUploader
                         value={field.value}
                         onValueChange={field.onChange}
-                        maxFiles={4}
-                        maxSize={4 * 1024 * 1024}
+                        maxFiles={1}
+                        maxSize={1 * 1024 * 1024}
                         // disabled={loading}
                         // progresses={progresses}
                         // pass the onUpload function here for direct upload
@@ -145,7 +186,7 @@ export default function ProductForm({
                 control={form.control}
                 name='name'
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className=''>
                     <FormLabel>Nama Acara</FormLabel>
                     <FormControl>
                       <Input placeholder='Masukkan Nama Acara' {...field} />
@@ -154,18 +195,52 @@ export default function ProductForm({
                   </FormItem>
                 )}
               />
+
+              <div className='flex gap-5'>
+                <FormField
+                  control={form.control}
+                  name='pembicara'
+                  render={({ field }) => (
+                    <FormItem className='w-6/12'>
+                      <FormLabel>Nama Pembicara</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder='Masukkan Nama Pembicara'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='jabatan_pembicara'
+                  render={({ field }) => (
+                    <FormItem className='w-6/12'>
+                      <FormLabel>Jabatan Pembicara</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder='Masukkan Nama Jabatan Pembicara'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name='category'
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className='w-full'>
                     <FormLabel>Kategori Acara</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(value)}
-                      value={field.value[field.value.length - 1]}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className='w-full'>
                           <SelectValue placeholder='Pilih Kategori' />
                         </SelectTrigger>
                       </FormControl>
@@ -173,13 +248,64 @@ export default function ProductForm({
                         <SelectItem value='seminar'>Seminar</SelectItem>
                         <SelectItem value='workshop'>Workshop</SelectItem>
                         <SelectItem value='talkshow'>Talkshow</SelectItem>
-                        <SelectItem value='webianr'>Webinar</SelectItem>
+                        <SelectItem value='webinar'>Webinar</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <div className='flex gap-5'>
+                <FormField
+                  control={form.control}
+                  name='tanggal'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tanggal Acara</FormLabel>
+                      <FormControl>
+                        <DateTimePicker24hForm
+                          onSelect={(val) => field.onChange(val)}
+                          value={field.value}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='tempat'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tempat Acara</FormLabel>
+                      <FormControl>
+                        <Input placeholder='Audotorium Gedung A' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='slot'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Total Tiket</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          placeholder='30 Tiket'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className='flex flex-col gap-3'>
                 <FormField
@@ -191,7 +317,10 @@ export default function ProductForm({
                       <FormControl>
                         <Checkbox
                           checked={field.value}
-                          onCheckedChange={field.onChange}
+                          onCheckedChange={(val) => {
+                            field.onChange(val);
+                            form.setValue('harga', '0');
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -208,10 +337,16 @@ export default function ProductForm({
                         <FormLabel>Harga Tiket</FormLabel>
                         <FormControl>
                           <Input
-                            type='number'
-                            step='0.01'
-                            placeholder='Enter harga'
-                            {...field}
+                            type='text'
+                            inputMode='numeric'
+                            placeholder='Masukkan harga tiket'
+                            value={formatRupiah(field.value)}
+                            onChange={(e) => {
+                              const numericValue = parseRupiah(e.target.value);
+                              field.onChange(numericValue);
+                            }}
+                            name={field.name}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -238,7 +373,9 @@ export default function ProductForm({
                 </FormItem>
               )}
             />
-            <Button type='submit'>Tambah Acara</Button>
+            <Button type='submit' className='w-full' disabled={isLoading}>
+              Tambah Acara
+            </Button>
           </form>
         </Form>
       </CardContent>
