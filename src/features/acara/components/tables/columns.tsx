@@ -66,9 +66,10 @@ export const columns: ColumnDef<Product>[] = [
   {
     accessorKey: 'harga',
     header: 'PRICE',
-    cell: ({ cell }) => {
-      const isFree = cell.getValue<Product['is_free']>();
-      const price = cell.getValue<Product['harga']>();
+    cell: ({ row }) => {
+      const isFree = row.original.is_free;
+
+      const price = row.original.harga;
       return (
         <div className=''>
           {isFree ? (
